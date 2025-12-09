@@ -4,32 +4,75 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import Home from "./pages/Home";
+import DashboardLayout from "./components/DashboardLayout";
+import Dashboard from "./pages/Dashboard";
+import ModelManagement from "./pages/ModelManagement";
+import ImageManagement from "./pages/ImageManagement";
+import ProjectManagement from "./pages/ProjectManagement";
+import DeploymentManagement from "./pages/DeploymentManagement";
+import TrainingManagement from "./pages/TrainingManagement";
+import APIManagement from "./pages/APIManagement";
+import EvaluationManagement from "./pages/EvaluationManagement";
+import AnomalyDetectionManagement from "./pages/AnomalyDetectionManagement";
 
 function Router() {
-  // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
-      <Route path={"/"} component={Home} />
-      <Route path={"/404"} component={NotFound} />
-      {/* Final fallback route */}
+      <Route path="/">
+        <DashboardLayout>
+          <Dashboard />
+        </DashboardLayout>
+      </Route>
+      <Route path="/models">
+        <DashboardLayout>
+          <ModelManagement />
+        </DashboardLayout>
+      </Route>
+      <Route path="/projects">
+        <DashboardLayout>
+          <ProjectManagement />
+        </DashboardLayout>
+      </Route>
+      <Route path="/deployments">
+        <DashboardLayout>
+          <DeploymentManagement />
+        </DashboardLayout>
+      </Route>
+      <Route path="/images">
+        <DashboardLayout>
+          <ImageManagement />
+        </DashboardLayout>
+      </Route>
+      <Route path="/trainings">
+        <DashboardLayout>
+          <TrainingManagement />
+        </DashboardLayout>
+      </Route>
+      <Route path="/apis">
+        <DashboardLayout>
+          <APIManagement />
+        </DashboardLayout>
+      </Route>
+      <Route path="/evaluations">
+        <DashboardLayout>
+          <EvaluationManagement />
+        </DashboardLayout>
+      </Route>
+      <Route path="/anomalies">
+        <DashboardLayout>
+          <AnomalyDetectionManagement />
+        </DashboardLayout>
+      </Route>
+      <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
   );
 }
 
-// NOTE: About Theme
-// - First choose a default theme according to your design style (dark or light bg), than change color palette in index.css
-//   to keep consistent foreground/background color across components
-// - If you want to make theme switchable, pass `switchable` ThemeProvider and use `useTheme` hook
-
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider
-        defaultTheme="light"
-        // switchable
-      >
+      <ThemeProvider defaultTheme="dark">
         <TooltipProvider>
           <Toaster />
           <Router />
