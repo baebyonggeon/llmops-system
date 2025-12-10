@@ -11,6 +11,7 @@ import ImageManagement from "./pages/ImageManagement";
 import ProjectManagement from "./pages/ProjectManagement";
 import DeploymentManagement from "./pages/DeploymentManagement";
 import TrainingManagement from "./pages/TrainingManagement";
+import TrainingMonitoring from "./pages/TrainingMonitoring";
 import APIManagement from "./pages/APIManagement";
 import EvaluationManagement from "./pages/EvaluationManagement";
 import AnomalyDetectionManagement from "./pages/AnomalyDetectionManagement";
@@ -46,6 +47,11 @@ function Router() {
       <Route path="/trainings">
         <DashboardLayout>
           <TrainingManagement />
+        </DashboardLayout>
+      </Route>
+      <Route path="/trainings/:id/monitoring">
+        <DashboardLayout>
+          <TrainingMonitoring />
         </DashboardLayout>
       </Route>
       <Route path="/apis">
