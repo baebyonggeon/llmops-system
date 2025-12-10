@@ -15,6 +15,7 @@ import TrainingMonitoring from "./pages/TrainingMonitoring";
 import APIManagement from "./pages/APIManagement";
 import EvaluationManagement from "./pages/EvaluationManagement";
 import AnomalyDetectionManagement from "./pages/AnomalyDetectionManagement";
+import NotificationCenterPage from "./pages/NotificationCenter";
 
 function Router() {
   return (
@@ -67,6 +68,11 @@ function Router() {
       <Route path="/anomalies">
         <DashboardLayout>
           <AnomalyDetectionManagement />
+        </DashboardLayout>
+      </Route>
+      <Route path="/notifications">
+        <DashboardLayout>
+          <NotificationCenterPage />
         </DashboardLayout>
       </Route>
       <Route path="/404" component={NotFound} />

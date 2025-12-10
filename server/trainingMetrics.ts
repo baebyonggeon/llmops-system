@@ -1,5 +1,6 @@
 import { Server as SocketIOServer, Socket } from "socket.io";
 import { Server as HTTPServer } from "http";
+import { processMetricAlerts, notifyTrainingCompleted, notifyTrainingStarted } from "./notificationEngine";
 
 export interface TrainingMetric {
   trainingId: number;
@@ -94,12 +95,27 @@ export function initializeTrainingMetricsServer(io: SocketIOServer) {
 
       activeSessions.set(trainingId, session);
 
+      // Notify training started
+      const userId = 1;
+      notifyTrainingStarted(trainingId, userId, `Training ${trainingId}`).catch((err) =>
+        console.error("[Training Metrics] Error notifying training start:", err)
+      );
+
       // Simulate training progress
       let currentEpoch = 0;
       const epochInterval = setInterval(() => {
         if (currentEpoch >= config.epochs) {
           session.status = "completed";
           metricsNamespace.to(`training-${trainingId}`).emit("training-completed", session);
+
+          // Notify training completed
+          if (session.metrics.length > 0) {
+            const finalMetric = session.metrics[session.metrics.length - 1];
+            notifyTrainingCompleted(trainingId, userId, finalMetric).catch((err) =>
+              console.error("[Training Metrics] Error notifying training completion:", err)
+            );
+          }
+
           clearInterval(epochInterval);
           return;
         }
@@ -116,6 +132,12 @@ export function initializeTrainingMetricsServer(io: SocketIOServer) {
 
           // Emit metric update to all subscribers
           metricsNamespace.to(`training-${trainingId}`).emit("metric-update", metric);
+
+          // Process metric-based alerts
+          const userId = 1;
+          processMetricAlerts(metric, userId).catch((err) =>
+            console.error("[Training Metrics] Error processing alerts:", err)
+          );
         }
 
         currentEpoch++;

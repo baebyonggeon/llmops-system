@@ -15,6 +15,13 @@
       "when": 1765273567176,
       "tag": "0001_mysterious_alex_wilder",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1765328673695,
+      "tag": "0002_faulty_roulette",
+      "breakpoints": true
     }
   ]
 }

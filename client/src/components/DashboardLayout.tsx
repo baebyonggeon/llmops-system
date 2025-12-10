@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
+import NotificationCenter from "./NotificationCenter";
 import {
   LayoutDashboard,
   LogOut,
@@ -50,6 +51,7 @@ const menuItems = [
   { icon: Network, label: "API 관리", path: "/apis" },
   { icon: BarChart3, label: "평가 관리", path: "/evaluations" },
   { icon: AlertCircle, label: "이상 탐지", path: "/anomalies" },
+  { icon: AlertCircle, label: "알림 센터", path: "/notifications" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -275,7 +277,15 @@ function DashboardLayoutContent({
                 </div>
               </div>
             </div>
+            <NotificationCenter />
           </div>
+        )}
+        {!isMobile && (
+          <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-2 border-b border-white/10 bg-gray-950/50 backdrop-blur-sm px-4">
+            <div className="ml-auto flex items-center gap-4">
+              <NotificationCenter />
+            </div>
+          </header>
         )}
         <main className="flex-1 p-4">{children}</main>
       </SidebarInset>

@@ -261,3 +261,57 @@ export const resourceGroups = mysqlTable("resourceGroups", {
 
 export type ResourceGroup = typeof resourceGroups.$inferSelect;
 export type InsertResourceGroup = typeof resourceGroups.$inferInsert;
+
+
+/**
+ * Notifications table - 알림 관리
+ */
+export const notifications = mysqlTable("notifications", {
+  id: int("id").autoincrement().primaryKey(),
+  notificationId: varchar("notificationId", { length: 128 }).notNull().unique(),
+  userId: int("userId").notNull(),
+  trainingId: int("trainingId"),
+  notificationType: mysqlEnum("notificationType", [
+    "training_completed",
+    "loss_threshold",
+    "accuracy_target",
+    "training_failed",
+    "training_started",
+    "custom",
+  ]).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  message: text("message"),
+  severity: mysqlEnum("severity", ["info", "warning", "error", "success"]).default("info"),
+  isRead: boolean("isRead").default(false),
+  metadata: text("metadata"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  readAt: timestamp("readAt"),
+});
+
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = typeof notifications.$inferInsert;
+
+/**
+ * Alert Conditions table - 알림 조건 설정
+ */
+export const alertConditions = mysqlTable("alertConditions", {
+  id: int("id").autoincrement().primaryKey(),
+  conditionId: varchar("conditionId", { length: 128 }).notNull().unique(),
+  userId: int("userId").notNull(),
+  trainingId: int("trainingId"),
+  conditionType: mysqlEnum("conditionType", [
+    "loss_threshold",
+    "accuracy_target",
+    "training_completed",
+    "training_failed",
+  ]).notNull(),
+  threshold: decimal("threshold", { precision: 10, scale: 4 }),
+  operator: mysqlEnum("operator", ["less_than", "greater_than", "equal", "less_equal", "greater_equal"]),
+  isActive: boolean("isActive").default(true),
+  description: text("description"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type AlertCondition = typeof alertConditions.$inferSelect;
+export type InsertAlertCondition = typeof alertConditions.$inferInsert;
