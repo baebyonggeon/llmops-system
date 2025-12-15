@@ -1,317 +1,444 @@
 import {
-  int,
-  mysqlEnum,
-  mysqlTable,
-  text,
-  timestamp,
+  pgTable,
+  serial,
   varchar,
-  decimal,
+  text,
   boolean,
-  json,
-} from "drizzle-orm/mysql-core";
+  timestamp,
+  integer,
+  decimal,
+  date,
+  primaryKey,
+  foreignKey,
+  index,
+  unique,
+} from "drizzle-orm/pg-core";
 
-/**
- * Core user table backing auth flow.
- */
-export const users = mysqlTable("users", {
-  id: int("id").autoincrement().primaryKey(),
-  openId: varchar("openId", { length: 64 }).notNull().unique(),
-  name: text("name"),
-  email: varchar("email", { length: 320 }),
-  loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-  lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
-});
+// ==========================================
+// COMMON CODE TABLE
+// ==========================================
+export const sysComCd = pgTable(
+  "sys_com_cd",
+  {
+    lcffCd: varchar("lcff_cd", { length: 50 }).notNull(),
+    sclffCd: varchar("sclff_cd", { length: 50 }).notNull(),
+    lcffNm: varchar("lcff_nm", { length: 200 }),
+    sclffNm: varchar("sclff_nm", { length: 200 }),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.lcffCd, table.sclffCd] }),
+  })
+);
 
-export type User = typeof users.$inferSelect;
-export type InsertUser = typeof users.$inferInsert;
+// ==========================================
+// MEMBER DOMAIN
+// ==========================================
+export const mbrBas = pgTable(
+  "mbr_bas",
+  {
+    mbrId: serial("mbr_id").primaryKey(),
+    custCd: varchar("cust_cd", { length: 50 }),
+    mbrTypeCd: varchar("mbr_type_cd", { length: 50 }),
+    id: varchar("id", { length: 100 }).unique(),
+    mbrNm: varchar("mbr_nm", { length: 200 }),
+    pwd: varchar("pwd", { length: 255 }),
+    mbrUuid: varchar("mbr_uuid", { length: 100 }).unique(),
+    mbrSttusCd: varchar("mbr_sttus_cd", { length: 50 }),
+    mbrClassId: varchar("mbr_class_id", { length: 50 }),
+    phoneNumber: varchar("phone_number", { length: 20 }),
+    emailAthn: varchar("email_athn", { length: 100 }),
+    tmpPwdIssYn: varchar("tmp_pwd_iss_yn", { length: 1 }).default("N"),
+    useYn: varchar("use_yn", { length: 1 }).default("Y"),
+    crtrId: varchar("cretr_id", { length: 100 }),
+    cretDt: timestamp("cret_dt").defaultNow(),
+    amdrId: varchar("amdr_id", { length: 100 }),
+    amdDt: timestamp("amd_dt").defaultNow(),
+  },
+  (table) => ({
+    custCdIdx: index("idx_mbr_bas_cust_cd").on(table.custCd),
+    mbrUuidIdx: index("idx_mbr_bas_mbr_uuid").on(table.mbrUuid),
+  })
+);
 
-/**
- * Models table - AI 모델 정보 관리
- */
-export const models = mysqlTable("models", {
-  id: int("id").autoincrement().primaryKey(),
-  modelId: varchar("modelId", { length: 128 }).notNull().unique(),
-  modelName: varchar("modelName", { length: 255 }).notNull(),
-  releaseDate: timestamp("releaseDate"),
-  description: text("description"),
-  contextLength: varchar("contextLength", { length: 50 }),
-  parameters: varchar("parameters", { length: 100 }),
-  cpuRequired: int("cpuRequired"),
-  memoryRequired: int("memoryRequired"), // GB
-  gpuRequired: int("gpuRequired"),
-  gpuMemoryRequired: int("gpuMemoryRequired"), // GB
-  modelIcon: varchar("modelIcon", { length: 500 }),
-  isActive: boolean("isActive").default(true).notNull(),
-  createdBy: int("createdBy").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+// ==========================================
+// PROJECT DOMAIN
+// ==========================================
+export const pjtBas = pgTable(
+  "pjt_bas",
+  {
+    pjtId: serial("pjt_id").primaryKey(),
+    custCd: varchar("cust_cd", { length: 50 }).notNull(),
+    pjtNm: varchar("pjt_nm", { length: 200 }),
+    pjtDscrt: text("pjt_dscrt"),
+    delYn: varchar("del_yn", { length: 1 }).default("N"),
+    useYn: varchar("use_yn", { length: 1 }).default("Y"),
+    crtrId: varchar("cretr_id", { length: 100 }),
+    cretDt: timestamp("cret_dt").defaultNow(),
+    amdrId: varchar("amdr_id", { length: 100 }),
+    amdDt: timestamp("amd_dt").defaultNow(),
+    stateCd: varchar("state_cd", { length: 50 }),
+    pjtUuid: varchar("pjt_uuid", { length: 100 }).unique(),
+    reason: text("reason"),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.pjtId, table.custCd] }),
+    custCdIdx: index("idx_pjt_bas_cust_cd").on(table.custCd),
+    pjtUuidIdx: index("idx_pjt_bas_pjt_uuid").on(table.pjtUuid),
+  })
+);
 
-export type Model = typeof models.$inferSelect;
-export type InsertModel = typeof models.$inferInsert;
+export const pjtMbrAutMap = pgTable(
+  "pjt_mbr_aut_map",
+  {
+    pjtId: integer("pjt_id").notNull(),
+    custCd: varchar("cust_cd", { length: 50 }).notNull(),
+    mbrUuid: varchar("mbr_uuid", { length: 100 }).notNull(),
+    favYn: varchar("fav_yn", { length: 1 }).default("N"),
+    auth: varchar("auth", { length: 50 }),
+    crtrId: varchar("cretr_id", { length: 100 }),
+    cretDt: timestamp("cret_dt").defaultNow(),
+    mbrTypeCd: varchar("mbr_type_cd", { length: 50 }),
+    id: serial("id").primaryKey(),
+  },
+  (table) => ({
+    fk_pjt: foreignKey({ columns: [table.pjtId, table.custCd], foreignColumns: [pjtBas.pjtId, pjtBas.custCd], name: "fk_pjt_mbr_aut_pjt" }),
+    pjtIdIdx: index("idx_pjt_mbr_aut_pjt_id").on(table.pjtId),
+    mbrUuidIdx: index("idx_pjt_mbr_aut_mbr_uuid").on(table.mbrUuid),
+  })
+);
 
-/**
- * Images table - 학습/추론용 컨테이너 이미지 관리
- */
-export const images = mysqlTable("images", {
-  id: int("id").autoincrement().primaryKey(),
-  imageId: varchar("imageId", { length: 128 }).notNull().unique(),
-  imageName: varchar("imageName", { length: 255 }).notNull(),
-  releaseDate: timestamp("releaseDate"),
-  description: text("description"),
-  imageSizeGB: int("imageSizeGB"),
-  imageType: mysqlEnum("imageType", ["training", "inference"]).notNull(),
-  registryHost: varchar("registryHost", { length: 255 }),
-  registryTag: varchar("registryTag", { length: 100 }),
-  registryProject: varchar("registryProject", { length: 100 }),
-  registryImageTag: varchar("registryImageTag", { length: 100 }),
-  isActive: boolean("isActive").default(true).notNull(),
-  createdBy: int("createdBy").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+export const pjtResourceConfig = pgTable(
+  "pjt_resource_config",
+  {
+    pjtId: integer("pjt_id").primaryKey(),
+    pjtUuid: varchar("pjt_uuid", { length: 100 }),
+    isActive: boolean("is_active").default(true),
+    domain: varchar("domain", { length: 255 }),
+    resourcePolicy: text("resource_policy"),
+    allowedResourceGroups: text("allowed_resource_groups"),
+    allowedFolderHosts: text("allowed_folder_hosts"),
+    maxAllowedCpu: integer("max_allowed_cpu"),
+    maxAllowedMemory: integer("max_allowed_memory"),
+    containerRegistry: varchar("container_registry", { length: 255 }),
+    crtrId: varchar("cretr_id", { length: 100 }),
+    cretDt: timestamp("cret_dt").defaultNow(),
+    amdrId: varchar("amdr_id", { length: 100 }),
+    amdDt: timestamp("amd_dt").defaultNow(),
+    custCc: varchar("cust_cc", { length: 50 }),
+  },
+  (table) => ({
+    fk_pjt: foreignKey({ columns: [table.pjtId], foreignColumns: [pjtBas.pjtId], name: "fk_pjt_resource_config_pjt" }),
+  })
+);
 
-export type Image = typeof images.$inferSelect;
-export type InsertImage = typeof images.$inferInsert;
+// ==========================================
+// MODEL / IMAGE / DEPLOY DOMAIN
+// ==========================================
+export const mdlCatalog = pgTable(
+  "mdl_catalog",
+  {
+    llmId: integer("llm_id").notNull(),
+    mdlCtgryCd: varchar("mdl_ctgry_cd", { length: 50 }).notNull(),
+    provider: varchar("provider", { length: 100 }),
+    dscrt: text("dscrt"),
+    mdlLink: varchar("mdl_link", { length: 255 }),
+    dpYn: varchar("dp_yn", { length: 1 }).default("N"),
+    useYn: varchar("use_yn", { length: 1 }).default("Y"),
+    crtrId: varchar("cretr_id", { length: 100 }),
+    cretDt: timestamp("cret_dt").defaultNow(),
+    amdrId: varchar("amdr_id", { length: 100 }),
+    amdDt: timestamp("amd_dt").defaultNow(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.llmId, table.mdlCtgryCd] }),
+  })
+);
 
-/**
- * Projects table - 프로젝트 관리
- */
-export const projects = mysqlTable("projects", {
-  id: int("id").autoincrement().primaryKey(),
-  projectId: varchar("projectId", { length: 128 }).notNull().unique(),
-  projectName: varchar("projectName", { length: 255 }).notNull(),
-  description: text("description"),
-  adminId: int("adminId").notNull(),
-  isActive: boolean("isActive").default(false).notNull(),
-  isCreated: boolean("isCreated").default(false).notNull(), // 1차 저장 vs 최종 생성
-  createdBy: int("createdBy").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+export const llmBas = pgTable(
+  "llm_bas",
+  {
+    llmId: serial("llm_id").primaryKey(),
+    llmNnr: varchar("llm_nnr", { length: 100 }),
+    llmType: varchar("llm_type", { length: 50 }),
+    llmVer: varchar("llm_ver", { length: 50 }),
+    llmDscrt: text("llm_dscrt"),
+    llmDtl: text("llm_dtl"),
+    dpInstCnt: integer("dp_inst_cnt"),
+    dpInstDscrt: text("dp_inst_dscrt"),
+    storeType: varchar("store_type", { length: 50 }),
+    storeUrl: varchar("store_url", { length: 255 }),
+    storeUsr: varchar("store_usr", { length: 100 }),
+    storePwd: varchar("store_pwd", { length: 255 }),
+    mdlType: varchar("mdl_type", { length: 50 }),
+    mdlSize: varchar("mdl_size", { length: 50 }),
+    mdlStrtg: varchar("mdl_strtg", { length: 50 }),
+    pubYn: varchar("pub_yn", { length: 1 }).default("N"),
+    delYn: varchar("del_yn", { length: 1 }).default("N"),
+    useYn: varchar("use_yn", { length: 1 }).default("Y"),
+    crtrId: varchar("cretr_id", { length: 100 }),
+    cretDt: timestamp("cret_dt").defaultNow(),
+    amdrId: varchar("amdr_id", { length: 100 }),
+    amdDt: timestamp("amd_dt").defaultNow(),
+    strmYn: varchar("strm_yn", { length: 1 }).default("N"),
+    contextWindowLength: integer("context_window_length"),
+    embeddingYn: varchar("embedding_yn", { length: 1 }).default("N"),
+    evlYn: varchar("evl_yn", { length: 1 }).default("N"),
+    holderYn: varchar("holder_yn", { length: 1 }).default("N"),
+    llmParam: text("llm_param"),
+  },
+  (table) => ({
+    llmNnrIdx: index("idx_llm_bas_llm_nnr").on(table.llmNnr),
+  })
+);
 
-export type Project = typeof projects.$inferSelect;
-export type InsertProject = typeof projects.$inferInsert;
+export const llmImage = pgTable(
+  "llm_image",
+  {
+    imageId: serial("image_id").primaryKey(),
+    imageDscrt: text("image_dscrt"),
+    tag: varchar("tag", { length: 100 }),
+    imageSaveFileNm: varchar("image_save_file_nm", { length: 255 }),
+    imageFileExt: varchar("image_file_ext", { length: 20 }),
+    imageFileSize: integer("image_file_size"),
+    imageFileUrl: varchar("image_file_url", { length: 255 }),
+    crtrId: varchar("cretr_id", { length: 100 }),
+    cretDt: timestamp("cret_dt").defaultNow(),
+    amdrId: varchar("amdr_id", { length: 100 }),
+    amdDt: timestamp("amd_dt").defaultNow(),
+    imageRealFileNm: varchar("image_real_file_nm", { length: 255 }),
+  },
+  (table) => ({
+    tagIdx: index("idx_llm_image_tag").on(table.tag),
+  })
+);
 
-/**
- * Deployments table - 모델 배포 이력 관리
- */
-export const deployments = mysqlTable("deployments", {
-  id: int("id").autoincrement().primaryKey(),
-  deploymentId: varchar("deploymentId", { length: 128 }).notNull().unique(),
-  modelId: int("modelId").notNull(),
-  imageId: int("imageId").notNull(),
-  deploymentName: varchar("deploymentName", { length: 255 }),
-  tensorParallelSize: int("tensorParallelSize"),
-  maxModelLen: int("maxModelLen"),
-  gpuMemoryUtilization: decimal("gpuMemoryUtilization", { precision: 3, scale: 2 }),
-  resourceGroupId: varchar("resourceGroupId", { length: 128 }),
-  resourcePreset: varchar("resourcePreset", { length: 100 }),
-  status: mysqlEnum("status", ["pending", "running", "completed", "failed"]).default("pending"),
-  callCount: int("callCount").default(0),
-  createdBy: int("createdBy").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+export const dpBas = pgTable(
+  "dp_bas",
+  {
+    dpId: serial("dp_id").primaryKey(),
+    custCd: varchar("cust_cd", { length: 50 }).notNull(),
+    pjtId: integer("pjt_id"),
+    llmId: integer("llm_id"),
+    ftId: integer("ft_id"),
+    apdplIds: text("apdpl_ids"),
+    dataSetId: integer("data_set_id"),
+    instCnt: integer("inst_cnt"),
+    dpSttus: varchar("dp_sttus", { length: 50 }),
+    delYn: varchar("del_yn", { length: 1 }).default("N"),
+    useYn: varchar("use_yn", { length: 1 }).default("Y"),
+    dpYn: varchar("dp_yn", { length: 1 }).default("N"),
+    strmYn: varchar("strm_yn", { length: 1 }).default("N"),
+    prompt: text("prompt"),
+    dpDnsDt: timestamp("dp_dns_dt"),
+    cnvsr: varchar("cnvsr", { length: 100 }),
+    cmpl: varchar("cmpl", { length: 100 }),
+    contFltr: text("cont_fltr"),
+    contFlterId: integer("cont_fltr_id"),
+    lastDpId: integer("last_dp_id"),
+    lastDpUsr: varchar("last_dp_usr", { length: 100 }),
+    dpGrpCode: varchar("dp_grp_code", { length: 50 }),
+    dpVersion: varchar("dp_version", { length: 50 }),
+    dpPrevDpId: integer("dp_prev_dp_id"),
+    serviceId: integer("service_id"),
+    deployParam: text("deploy_param"),
+    apiId: integer("api_id"),
+    runSttus: varchar("run_sttus", { length: 50 }),
+    svcNnr: varchar("svc_nnr", { length: 100 }),
+    crtrId: varchar("cretr_id", { length: 100 }),
+    cretDt: timestamp("cret_dt").defaultNow(),
+    amdrId: varchar("amdr_id", { length: 100 }),
+    amdDt: timestamp("amd_dt").defaultNow(),
+  },
+  (table) => ({
+    fk_pjt: foreignKey({ columns: [table.pjtId], foreignColumns: [pjtBas.pjtId], name: "fk_dp_bas_pjt" }),
+    fk_llm: foreignKey({ columns: [table.llmId], foreignColumns: [llmBas.llmId], name: "fk_dp_bas_llm" }),
+    custCdIdx: index("idx_dp_bas_cust_cd").on(table.custCd),
+    dpSttuIdx: index("idx_dp_bas_dp_sttus").on(table.dpSttus),
+  })
+);
 
-export type Deployment = typeof deployments.$inferSelect;
-export type InsertDeployment = typeof deployments.$inferInsert;
+// ==========================================
+// API / USAGE / KEY / STATS DOMAIN
+// ==========================================
+export const apiBas = pgTable(
+  "api_bas",
+  {
+    apiId: serial("api_id").primaryKey(),
+    pjtId: integer("pjt_id"),
+    apiNm: varchar("api_nm", { length: 200 }),
+    apiDscrt: text("api_dscrt"),
+    apiEndpoint: varchar("api_endpoint", { length: 255 }),
+    apiMthd: varchar("api_mthd", { length: 50 }),
+    apiVrsn: varchar("api_vrsn", { length: 50 }),
+    useYn: varchar("use_yn", { length: 1 }).default("Y"),
+    delYn: varchar("del_yn", { length: 1 }).default("N"),
+    status: varchar("status", { length: 50 }),
+    crtrId: varchar("cretr_id", { length: 100 }),
+    cretDt: timestamp("cret_dt").defaultNow(),
+    amdrId: varchar("amdr_id", { length: 100 }),
+    amdDt: timestamp("amd_dt").defaultNow(),
+  },
+  (table) => ({
+    fk_pjt: foreignKey({ columns: [table.pjtId], foreignColumns: [pjtBas.pjtId], name: "fk_api_bas_pjt" }),
+    pjtIdIdx: index("idx_api_bas_pjt_id").on(table.pjtId),
+  })
+);
 
-/**
- * Trainings table - 모델 학습 이력 관리
- */
-export const trainings = mysqlTable("trainings", {
-  id: int("id").autoincrement().primaryKey(),
-  trainingId: varchar("trainingId", { length: 128 }).notNull().unique(),
-  baseModelId: int("baseModelId").notNull(),
-  trainingName: varchar("trainingName", { length: 255 }),
-  modelType: varchar("modelType", { length: 100 }), // CNN, RNN, LSTM, BERT, GPT, etc.
-  trainingObjective: varchar("trainingObjective", { length: 100 }), // Classification, Regression, etc.
-  schedule: mysqlEnum("schedule", ["immediate", "scheduled"]).default("immediate"),
-  scheduledTime: timestamp("scheduledTime"),
-  trainingDataIds: text("trainingDataIds"), // JSON array of training data IDs
-  batchSize: int("batchSize"),
-  learningRate: decimal("learningRate", { precision: 8, scale: 6 }),
-  epochs: int("epochs"),
-  earlyStopping: boolean("earlyStopping").default(false),
-  earlyStoppingPatience: int("earlyStoppingPatience"),
-  loraAlpha: int("loraAlpha"),
-  loraR: int("loraR"),
-  loraTargetModules: text("loraTargetModules"), // JSON array
-  loraDropout: decimal("loraDropout", { precision: 3, scale: 2 }),
-  fp16Optimizer: boolean("fp16Optimizer").default(false),
-  resourceGroupId: varchar("resourceGroupId", { length: 128 }),
-  resourcePreset: varchar("resourcePreset", { length: 100 }),
-  estimatedTrainingTime: int("estimatedTrainingTime"), // minutes
-  status: mysqlEnum("status", ["pending", "running", "completed", "failed"]).default("pending"),
-  gpuUsage: decimal("gpuUsage", { precision: 5, scale: 2 }),
-  loss: decimal("loss", { precision: 10, scale: 6 }),
-  createdBy: int("createdBy").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+export const apiMpBas = pgTable(
+  "api_mp_bas",
+  {
+    mpId: serial("mp_id").primaryKey(),
+    custCd: varchar("cust_cd", { length: 50 }).notNull(),
+    externalApiEp: varchar("external_api_ep", { length: 255 }),
+    internalApiEp: varchar("internal_api_ep", { length: 255 }),
+    apiId: integer("api_id"),
+    apiKey: varchar("api_key", { length: 255 }),
+    mpPriority: integer("mp_priority"),
+    mpDscrt: text("mp_dscrt"),
+    cacheTtlSec: integer("cache_ttl_sec"),
+    lastCacheDt: timestamp("last_cache_dt"),
+    useYn: varchar("use_yn", { length: 1 }).default("Y"),
+    delYn: varchar("del_yn", { length: 1 }).default("N"),
+    cretDt: timestamp("cret_dt").defaultNow(),
+    amdDt: timestamp("amd_dt").defaultNow(),
+    cacheVer: varchar("cache_ver", { length: 50 }),
+  },
+  (table) => ({
+    fk_api: foreignKey({ columns: [table.apiId], foreignColumns: [apiBas.apiId], name: "fk_api_mp_bas_api" }),
+    custCdIdx: index("idx_api_mp_bas_cust_cd").on(table.custCd),
+  })
+);
 
-export type Training = typeof trainings.$inferSelect;
-export type InsertTraining = typeof trainings.$inferInsert;
+export const apikeyBas = pgTable(
+  "apikey_bas",
+  {
+    keyId: serial("key_id").primaryKey(),
+    apiId: integer("api_id"),
+    pjtId: integer("pjt_id"),
+    custCd: varchar("cust_cd", { length: 50 }),
+    apiKey: varchar("api_key", { length: 255 }).unique(),
+    expireDate: date("expire_date"),
+    rateLimitYn: varchar("rate_limit_yn", { length: 1 }).default("N"),
+    monthlyUsageLimit: integer("monthly_usage_limit"),
+    apikeyDesc: text("apikey_desc"),
+    apikeyMngr: varchar("apikey_mngr", { length: 100 }),
+    role: varchar("role", { length: 50 }),
+    status: varchar("status", { length: 50 }),
+    crtrId: varchar("cretr_id", { length: 100 }),
+    cretDt: timestamp("cret_dt").defaultNow(),
+    amdrId: varchar("amdr_id", { length: 100 }),
+    amdDt: timestamp("amd_dt").defaultNow(),
+    apiKeyHash: varchar("api_key_hash", { length: 255 }),
+    keyNm: varchar("key_nm", { length: 100 }),
+  },
+  (table) => ({
+    fk_api: foreignKey({ columns: [table.apiId], foreignColumns: [apiBas.apiId], name: "fk_apikey_bas_api" }),
+    fk_pjt: foreignKey({ columns: [table.pjtId], foreignColumns: [pjtBas.pjtId], name: "fk_apikey_bas_pjt" }),
+    apiIdIdx: index("idx_apikey_bas_api_id").on(table.apiId),
+    pjtIdIdx: index("idx_apikey_bas_pjt_id").on(table.pjtId),
+  })
+);
 
-/**
- * APIs table - API 정보 관리
- */
-export const apis = mysqlTable("apis", {
-  id: int("id").autoincrement().primaryKey(),
-  apiId: varchar("apiId", { length: 128 }).notNull().unique(),
-  apiName: varchar("apiName", { length: 255 }).notNull(),
-  description: text("description"),
-  endpoint: varchar("endpoint", { length: 500 }),
-  deploymentId: int("deploymentId"),
-  status: mysqlEnum("status", ["active", "inactive"]).default("active"),
-  callCount: int("callCount").default(0),
-  createdBy: int("createdBy").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+export const apiUsageRealtime = pgTable(
+  "api_usage_realtime",
+  {
+    usageId: serial("usage_id").primaryKey(),
+    pjtId: integer("pjt_id"),
+    apiId: integer("api_id"),
+    apikeyId: integer("apikey_id"),
+    modelName: varchar("model_name", { length: 100 }),
+    todayRequestCount: integer("today_request_count").default(0),
+    todaySuccessCount: integer("today_success_count").default(0),
+    todayFailCount: integer("today_fail_count").default(0),
+    todayInputTokens: integer("today_input_tokens").default(0),
+    todayOutputTokens: integer("today_output_tokens").default(0),
+    todayTotalTokens: integer("today_total_tokens").default(0),
+    monthlyRequestCount: integer("monthly_request_count").default(0),
+    monthlyTokens: integer("monthly_tokens").default(0),
+    totalRequestCount: integer("total_request_count").default(0),
+    totalTokens: integer("total_tokens").default(0),
+    lastRequestTime: timestamp("last_request_time"),
+    lastResetDate: date("last_reset_date"),
+    cretDt: timestamp("cret_dt").defaultNow(),
+    updtDt: timestamp("updt_dt").defaultNow(),
+  },
+  (table) => ({
+    fk_pjt: foreignKey({ columns: [table.pjtId], foreignColumns: [pjtBas.pjtId], name: "fk_api_usage_realtime_pjt" }),
+    fk_api: foreignKey({ columns: [table.apiId], foreignColumns: [apiBas.apiId], name: "fk_api_usage_realtime_api" }),
+    pjtIdIdx: index("idx_api_usage_realtime_pjt_id").on(table.pjtId),
+    apiIdIdx: index("idx_api_usage_realtime_api_id").on(table.apiId),
+  })
+);
 
-export type Api = typeof apis.$inferSelect;
-export type InsertApi = typeof apis.$inferInsert;
+export const apiAccessStatDaily = pgTable(
+  "api_access_stat_daily",
+  {
+    statDate: date("stat_date").notNull(),
+    apiId: integer("api_id").notNull(),
+    custCd: varchar("cust_cd", { length: 50 }).notNull(),
+    statusCode: varchar("status_code", { length: 10 }).notNull(),
+    successCount: integer("success_count").default(0),
+    failCount: integer("fail_count").default(0),
+    avgLatencyMs: decimal("avg_latency_ms", { precision: 10, scale: 2 }),
+    maxLatencyMs: decimal("max_latency_ms", { precision: 10, scale: 2 }),
+    minLatencyMs: decimal("min_latency_ms", { precision: 10, scale: 2 }),
+    lastUpdatedAt: timestamp("last_updated_at").defaultNow(),
+  },
+  (table) => ({
+    pk: primaryKey({
+      columns: [table.statDate, table.apiId, table.custCd, table.statusCode],
+    }),
+    fk_api: foreignKey({
+      columns: [table.apiId],
+      foreignColumns: [apiBas.apiId],
+      name: "fk_api_access_stat_daily_api",
+    }),
+    apiIdIdx: index("idx_api_access_stat_daily_api_id").on(table.apiId),
+    custCdIdx: index("idx_api_access_stat_daily_cust_cd").on(table.custCd),
+  })
+);
 
-/**
- * API Keys table - API 키 관리
- */
-export const apiKeys = mysqlTable("apiKeys", {
-  id: int("id").autoincrement().primaryKey(),
-  apiKeyId: varchar("apiKeyId", { length: 128 }).notNull().unique(),
-  apiId: int("apiId").notNull(),
-  keyName: varchar("keyName", { length: 255 }).notNull(),
-  keyValue: varchar("keyValue", { length: 255 }).notNull().unique(),
-  expiryDate: timestamp("expiryDate"),
-  usageLimit: int("usageLimit"),
-  usageCount: int("usageCount").default(0),
-  status: mysqlEnum("status", ["active", "inactive", "expired"]).default("active"),
-  createdBy: int("createdBy").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+// ==========================================
+// TYPE EXPORTS
+// ==========================================
+export type SysComCd = typeof sysComCd.$inferSelect;
+export type InsertSysComCd = typeof sysComCd.$inferInsert;
 
-export type ApiKey = typeof apiKeys.$inferSelect;
-export type InsertApiKey = typeof apiKeys.$inferInsert;
+export type MbrBas = typeof mbrBas.$inferSelect;
+export type InsertMbrBas = typeof mbrBas.$inferInsert;
 
-/**
- * Evaluations table - 모델 평가 관리
- */
-export const evaluations = mysqlTable("evaluations", {
-  id: int("id").autoincrement().primaryKey(),
-  evaluationId: varchar("evaluationId", { length: 128 }).notNull().unique(),
-  modelId: int("modelId").notNull(),
-  evaluationName: varchar("evaluationName", { length: 255 }),
-  evaluationType: varchar("evaluationType", { length: 100 }),
-  status: mysqlEnum("status", ["pending", "in_progress", "completed", "failed"]).default("pending"),
-  qualityScore: decimal("qualityScore", { precision: 5, scale: 2 }),
-  evaluationData: text("evaluationData"), // JSON
-  resultSummary: text("resultSummary"),
-  createdBy: int("createdBy").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+export type PjtBas = typeof pjtBas.$inferSelect;
+export type InsertPjtBas = typeof pjtBas.$inferInsert;
 
-export type Evaluation = typeof evaluations.$inferSelect;
-export type InsertEvaluation = typeof evaluations.$inferInsert;
+export type PjtMbrAutMap = typeof pjtMbrAutMap.$inferSelect;
+export type InsertPjtMbrAutMap = typeof pjtMbrAutMap.$inferInsert;
 
-/**
- * Anomaly Detections table - 이상 탐지 관리
- */
-export const anomalyDetections = mysqlTable("anomalyDetections", {
-  id: int("id").autoincrement().primaryKey(),
-  anomalyId: varchar("anomalyId", { length: 128 }).notNull().unique(),
-  deploymentId: int("deploymentId").notNull(),
-  anomalyType: varchar("anomalyType", { length: 100 }),
-  severity: mysqlEnum("severity", ["low", "medium", "high", "critical"]).default("medium"),
-  description: text("description"),
-  detectedAt: timestamp("detectedAt").defaultNow(),
-  status: mysqlEnum("status", ["detected", "investigating", "resolved"]).default("detected"),
-  resolution: text("resolution"),
-  resolvedBy: int("resolvedBy"),
-  resolvedAt: timestamp("resolvedAt"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+export type PjtResourceConfig = typeof pjtResourceConfig.$inferSelect;
+export type InsertPjtResourceConfig = typeof pjtResourceConfig.$inferInsert;
 
-export type AnomalyDetection = typeof anomalyDetections.$inferSelect;
-export type InsertAnomalyDetection = typeof anomalyDetections.$inferInsert;
+export type MdlCatalog = typeof mdlCatalog.$inferSelect;
+export type InsertMdlCatalog = typeof mdlCatalog.$inferInsert;
 
-/**
- * Resource Groups table - 자원 그룹 관리
- */
-export const resourceGroups = mysqlTable("resourceGroups", {
-  id: int("id").autoincrement().primaryKey(),
-  resourceGroupId: varchar("resourceGroupId", { length: 128 }).notNull().unique(),
-  groupName: varchar("groupName", { length: 255 }).notNull(),
-  description: text("description"),
-  totalGPU: int("totalGPU"),
-  totalCPU: int("totalCPU"),
-  totalMemoryGB: int("totalMemoryGB"),
-  usedGPU: int("usedGPU").default(0),
-  usedCPU: int("usedCPU").default(0),
-  usedMemoryGB: int("usedMemoryGB").default(0),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+export type LlmBas = typeof llmBas.$inferSelect;
+export type InsertLlmBas = typeof llmBas.$inferInsert;
 
-export type ResourceGroup = typeof resourceGroups.$inferSelect;
-export type InsertResourceGroup = typeof resourceGroups.$inferInsert;
+export type LlmImage = typeof llmImage.$inferSelect;
+export type InsertLlmImage = typeof llmImage.$inferInsert;
 
+export type DpBas = typeof dpBas.$inferSelect;
+export type InsertDpBas = typeof dpBas.$inferInsert;
 
-/**
- * Notifications table - 알림 관리
- */
-export const notifications = mysqlTable("notifications", {
-  id: int("id").autoincrement().primaryKey(),
-  notificationId: varchar("notificationId", { length: 128 }).notNull().unique(),
-  userId: int("userId").notNull(),
-  trainingId: int("trainingId"),
-  notificationType: mysqlEnum("notificationType", [
-    "training_completed",
-    "loss_threshold",
-    "accuracy_target",
-    "training_failed",
-    "training_started",
-    "custom",
-  ]).notNull(),
-  title: varchar("title", { length: 255 }).notNull(),
-  message: text("message"),
-  severity: mysqlEnum("severity", ["info", "warning", "error", "success"]).default("info"),
-  isRead: boolean("isRead").default(false),
-  metadata: text("metadata"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  readAt: timestamp("readAt"),
-});
+export type ApiBas = typeof apiBas.$inferSelect;
+export type InsertApiBas = typeof apiBas.$inferInsert;
 
-export type Notification = typeof notifications.$inferSelect;
-export type InsertNotification = typeof notifications.$inferInsert;
+export type ApiMpBas = typeof apiMpBas.$inferSelect;
+export type InsertApiMpBas = typeof apiMpBas.$inferInsert;
 
-/**
- * Alert Conditions table - 알림 조건 설정
- */
-export const alertConditions = mysqlTable("alertConditions", {
-  id: int("id").autoincrement().primaryKey(),
-  conditionId: varchar("conditionId", { length: 128 }).notNull().unique(),
-  userId: int("userId").notNull(),
-  trainingId: int("trainingId"),
-  conditionType: mysqlEnum("conditionType", [
-    "loss_threshold",
-    "accuracy_target",
-    "training_completed",
-    "training_failed",
-  ]).notNull(),
-  threshold: decimal("threshold", { precision: 10, scale: 4 }),
-  operator: mysqlEnum("operator", ["less_than", "greater_than", "equal", "less_equal", "greater_equal"]),
-  isActive: boolean("isActive").default(true),
-  description: text("description"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+export type ApikeyBas = typeof apikeyBas.$inferSelect;
+export type InsertApikeyBas = typeof apikeyBas.$inferInsert;
 
-export type AlertCondition = typeof alertConditions.$inferSelect;
-export type InsertAlertCondition = typeof alertConditions.$inferInsert;
+export type ApiUsageRealtime = typeof apiUsageRealtime.$inferSelect;
+export type InsertApiUsageRealtime = typeof apiUsageRealtime.$inferInsert;
+
+export type ApiAccessStatDaily = typeof apiAccessStatDaily.$inferSelect;
+export type InsertApiAccessStatDaily = typeof apiAccessStatDaily.$inferInsert;

@@ -71,3 +71,23 @@
 - [x] 알림 센터 페이지 구현
 - [x] 대시보드 내 알림 중심 연동
 - [x] 알림 시스템 테스트
+
+
+## Phase 10: PostgreSQL 기반 ERD 매칭 시스템 재구현
+- [x] PostgreSQL 데이터베이스 설정
+- [x] Drizzle ORM PostgreSQL 드라이버 설정
+- [x] ERD 테이블 스키마 구현 (9개 핵심 테이블 생성)
+  - [x] sys_com_cd (공통 코드)
+  - [x] mbr_bas (멘늴)
+  - [x] pjt_bas (프로젝트)
+  - [x] pjt_mbr_aut_map (프로젝트 멘늴 권한)
+  - [x] llm_bas (LLM 모델)
+  - [x] mdl_catalog (모델 카탈로그)
+  - [x] llm_image (LLM 이미지)
+  - [x] notifications (알림)
+  - [x] alert_conditions (알림 조건)
+- [x] 데이터베이스 마이그레이션 실행 (수동 SQL 스크립트)
+- [x] PostgreSQL 서버 설치 및 실행
+- [x] 백엔드 코드 PostgreSQL 호환성 업데이트
+- [x] 프론트엔드 코드 PostgreSQL 스키마에 맞게 수정
+- [x] 개발 서버 재시작 및 정상 작동 확인

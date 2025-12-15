@@ -1,6 +1,5 @@
-import { Server as SocketIOServer, Socket } from "socket.io";
 import { Server as HTTPServer } from "http";
-import { processMetricAlerts, notifyTrainingCompleted, notifyTrainingStarted } from "./notificationEngine";
+import { notificationEngine } from "./notificationEngine";
 
 export interface TrainingMetric {
   trainingId: number;
@@ -26,7 +25,12 @@ export interface TrainingSession {
 const activeSessions = new Map<number, TrainingSession>();
 
 // Simulated metric generators for demo purposes
-function generateMetric(trainingId: number, epoch: number, batchesProcessed: number, totalBatches: number): TrainingMetric {
+function generateMetric(
+  trainingId: number,
+  epoch: number,
+  batchesProcessed: number,
+  totalBatches: number
+): TrainingMetric {
   // Simulate loss decreasing over time
   const baseLoss = 2.0;
   const lossDecay = Math.exp(-epoch / 10);
@@ -58,33 +62,16 @@ function generateMetric(trainingId: number, epoch: number, batchesProcessed: num
   };
 }
 
-export function initializeTrainingMetricsServer(io: SocketIOServer) {
-  const metricsNamespace = io.of("/training-metrics");
+export function initializeTrainingMetrics(io: any) {
+  // Start training
+  io.on("connection", (socket: any) => {
+    socket.on("training:start", async (data: { trainingId: number; totalEpochs: number }) => {
+      const { trainingId, totalEpochs } = data;
 
-  metricsNamespace.on("connection", (socket: Socket) => {
-    console.log(`[Training Metrics] Client connected: ${socket.id}`);
-
-    // Subscribe to a specific training session
-    socket.on("subscribe", (trainingId: number) => {
-      socket.join(`training-${trainingId}`);
-      console.log(`[Training Metrics] Client ${socket.id} subscribed to training ${trainingId}`);
-
-      // Send current session data if it exists
-      const session = activeSessions.get(trainingId);
-      if (session) {
-        socket.emit("session-update", session);
+      if (activeSessions.has(trainingId)) {
+        socket.emit("training:error", { message: "Training already running" });
+        return;
       }
-    });
-
-    // Unsubscribe from a training session
-    socket.on("unsubscribe", (trainingId: number) => {
-      socket.leave(`training-${trainingId}`);
-      console.log(`[Training Metrics] Client ${socket.id} unsubscribed from training ${trainingId}`);
-    });
-
-    // Start training simulation
-    socket.on("start-training", (trainingId: number, config: { epochs: number; totalBatches: number }) => {
-      console.log(`[Training Metrics] Starting training ${trainingId}`);
 
       const session: TrainingSession = {
         trainingId,
@@ -94,107 +81,122 @@ export function initializeTrainingMetricsServer(io: SocketIOServer) {
       };
 
       activeSessions.set(trainingId, session);
+      socket.emit("training:started", { trainingId, startTime: session.startTime });
 
-      // Notify training started
-      const userId = 1;
-      notifyTrainingStarted(trainingId, userId, `Training ${trainingId}`).catch((err) =>
-        console.error("[Training Metrics] Error notifying training start:", err)
-      );
+      // Simulate training loop
+      let epoch = 0;
+      const totalBatches = 100;
 
-      // Simulate training progress
-      let currentEpoch = 0;
-      const epochInterval = setInterval(() => {
-        if (currentEpoch >= config.epochs) {
-          session.status = "completed";
-          metricsNamespace.to(`training-${trainingId}`).emit("training-completed", session);
-
-          // Notify training completed
-          if (session.metrics.length > 0) {
-            const finalMetric = session.metrics[session.metrics.length - 1];
-            notifyTrainingCompleted(trainingId, userId, finalMetric).catch((err) =>
-              console.error("[Training Metrics] Error notifying training completion:", err)
-            );
-          }
-
-          clearInterval(epochInterval);
+      const trainingInterval = setInterval(async () => {
+        if (!activeSessions.has(trainingId)) {
+          clearInterval(trainingInterval);
           return;
         }
 
-        // Simulate batch processing within an epoch
-        for (let batch = 0; batch < config.totalBatches; batch++) {
-          const metric = generateMetric(trainingId, currentEpoch, batch + 1, config.totalBatches);
-          session.metrics.push(metric);
+        const currentSession = activeSessions.get(trainingId)!;
 
-          // Keep only last 100 metrics to avoid memory issues
-          if (session.metrics.length > 100) {
-            session.metrics.shift();
-          }
-
-          // Emit metric update to all subscribers
-          metricsNamespace.to(`training-${trainingId}`).emit("metric-update", metric);
-
-          // Process metric-based alerts
-          const userId = 1;
-          processMetricAlerts(metric, userId).catch((err) =>
-            console.error("[Training Metrics] Error processing alerts:", err)
-          );
+        if (currentSession.status !== "running") {
+          clearInterval(trainingInterval);
+          return;
         }
 
-        currentEpoch++;
-      }, 2000); // Update every 2 seconds per epoch
+        if (epoch >= totalEpochs) {
+          // Training completed
+          currentSession.status = "completed";
+          const finalMetrics = currentSession.metrics[currentSession.metrics.length - 1];
 
-      socket.emit("training-started", { trainingId, status: "running" });
-    });
+          socket.emit("training:completed", {
+            trainingId,
+            metrics: finalMetrics,
+            duration: Date.now() - session.startTime,
+          });
 
-    // Stop training
-    socket.on("stop-training", (trainingId: number) => {
-      const session = activeSessions.get(trainingId);
-      if (session) {
-        session.status = "completed";
-        metricsNamespace.to(`training-${trainingId}`).emit("training-stopped", session);
-      }
+          // Send notification
+          try {
+            await notificationEngine.notifyTrainingCompleted(1, trainingId, {
+              loss: finalMetrics?.loss || 0,
+              accuracy: finalMetrics?.accuracy || 0,
+              duration: Date.now() - session.startTime,
+            });
+          } catch (err: any) {
+            console.error("[TrainingMetrics] Notification error:", err.message);
+          }
+
+          activeSessions.delete(trainingId);
+          clearInterval(trainingInterval);
+          return;
+        }
+
+        // Generate metrics for current epoch
+        for (let batch = 0; batch < totalBatches; batch++) {
+          const metric = generateMetric(trainingId, epoch, batch, totalBatches);
+          currentSession.metrics.push(metric);
+
+          // Emit metric update
+          socket.emit("training:metric", metric);
+
+          // Check for alert conditions
+          if (metric.loss < 0.1) {
+            try {
+              await notificationEngine.notifyLossThresholdReached(1, trainingId, metric.loss, 0.1);
+            } catch (err: any) {
+              console.error("[TrainingMetrics] Notification error:", err.message);
+            }
+          }
+
+          if (metric.accuracy > 90) {
+            try {
+              await notificationEngine.notifyAccuracyTargetReached(1, trainingId, metric.accuracy, 90);
+            } catch (err: any) {
+              console.error("[TrainingMetrics] Notification error:", err.message);
+            }
+          }
+
+          // Small delay between batches
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+
+        epoch++;
+      }, 1000);
     });
 
     // Pause training
-    socket.on("pause-training", (trainingId: number) => {
-      const session = activeSessions.get(trainingId);
+    socket.on("training:pause", (data: { trainingId: number }) => {
+      const session = activeSessions.get(data.trainingId);
       if (session) {
         session.status = "paused";
-        metricsNamespace.to(`training-${trainingId}`).emit("training-paused", session);
+        socket.emit("training:paused", { trainingId: data.trainingId });
       }
     });
 
     // Resume training
-    socket.on("resume-training", (trainingId: number) => {
-      const session = activeSessions.get(trainingId);
+    socket.on("training:resume", (data: { trainingId: number }) => {
+      const session = activeSessions.get(data.trainingId);
       if (session) {
         session.status = "running";
-        metricsNamespace.to(`training-${trainingId}`).emit("training-resumed", session);
+        socket.emit("training:resumed", { trainingId: data.trainingId });
       }
     });
 
-    // Get current session state
-    socket.on("get-session", (trainingId: number) => {
-      const session = activeSessions.get(trainingId);
+    // Stop training
+    socket.on("training:stop", (data: { trainingId: number }) => {
+      const session = activeSessions.get(data.trainingId);
       if (session) {
-        socket.emit("session-state", session);
-      } else {
-        socket.emit("session-not-found", trainingId);
+        session.status = "failed";
+        socket.emit("training:stopped", { trainingId: data.trainingId });
+        activeSessions.delete(data.trainingId);
       }
     });
 
-    socket.on("disconnect", () => {
-      console.log(`[Training Metrics] Client disconnected: ${socket.id}`);
+    // Get active sessions
+    socket.on("training:list", () => {
+      const sessions = Array.from(activeSessions.values()).map((s) => ({
+        trainingId: s.trainingId,
+        status: s.status,
+        startTime: s.startTime,
+        metricsCount: s.metrics.length,
+      }));
+      socket.emit("training:sessions", sessions);
     });
   });
-
-  return metricsNamespace;
-}
-
-export function getActiveSessions() {
-  return Array.from(activeSessions.values());
-}
-
-export function getSessionMetrics(trainingId: number) {
-  return activeSessions.get(trainingId);
 }

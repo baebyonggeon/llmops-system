@@ -2,129 +2,138 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { z } from "zod";
 
 export const appRouter = router({
-    // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
+  
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return {
-        success: true,
-      } as const;
+      return { success: true } as const;
     }),
   }),
 
-  // LLMOps Feature Routers
-  models: router({
-    list: publicProcedure.query(async () => {
-      const { getModels } = await import("../server/db");
-      return getModels();
-    }),
-    getById: publicProcedure.input((val: any) => ({ id: val.id as number })).query(async ({ input }) => {
-      const { getModelById } = await import("../server/db");
-      return getModelById(input.id);
-    }),
-  }),
-
-  images: router({
-    list: publicProcedure.query(async () => {
-      const { getImages } = await import("../server/db");
-      return getImages();
-    }),
-    getById: publicProcedure.input((val: any) => ({ id: val.id as number })).query(async ({ input }) => {
-      const { getImageById } = await import("../server/db");
-      return getImageById(input.id);
-    }),
-  }),
-
+  // ==========================================
+  // PROJECT MANAGEMENT
+  // ==========================================
   projects: router({
-    list: publicProcedure.query(async () => {
-      const { getProjects } = await import("../server/db");
-      return getProjects();
-    }),
-    getById: publicProcedure.input((val: any) => ({ id: val.id as number })).query(async ({ input }) => {
-      const { getProjectById } = await import("../server/db");
-      return getProjectById(input.id);
-    }),
+    list: publicProcedure
+      .input(z.object({ custCd: z.string() }).optional())
+      .query(async ({ input }) => {
+        const { listProjects } = await import("../server/db");
+        if (input?.custCd) {
+          return await listProjects(input.custCd);
+        }
+        return [];
+      }),
+    
+    getById: publicProcedure
+      .input(z.object({ pjtId: z.number() }))
+      .query(async ({ input }) => {
+        const { getProjectById } = await import("../server/db");
+        return await getProjectById(input.pjtId);
+      }),
   }),
 
-  deployments: router({
+  // ==========================================
+  // LLM / MODEL MANAGEMENT
+  // ==========================================
+  llms: router({
     list: publicProcedure.query(async () => {
-      const { getDeployments } = await import("../server/db");
-      return getDeployments();
+      const { listLlms } = await import("../server/db");
+      return await listLlms();
     }),
-    getById: publicProcedure.input((val: any) => ({ id: val.id as number })).query(async ({ input }) => {
-      const { getDeploymentById } = await import("../server/db");
-      return getDeploymentById(input.id);
-    }),
+    
+    getById: publicProcedure
+      .input(z.object({ llmId: z.number() }))
+      .query(async ({ input }) => {
+        const { getLlmById } = await import("../server/db");
+        return await getLlmById(input.llmId);
+      }),
   }),
 
-  trainings: router({
-    list: publicProcedure.query(async () => {
-      const { getTrainings } = await import("../server/db");
-      return getTrainings();
-    }),
-    getById: publicProcedure.input((val: any) => ({ id: val.id as number })).query(async ({ input }) => {
-      const { getTrainingById } = await import("../server/db");
-      return getTrainingById(input.id);
-    }),
-  }),
-
+  // ==========================================
+  // API MANAGEMENT
+  // ==========================================
   apis: router({
-    list: publicProcedure.query(async () => {
-      const { getApisList } = await import("../server/db");
-      return getApisList();
-    }),
-    getById: publicProcedure.input((val: any) => ({ id: val.id as number })).query(async ({ input }) => {
-      const { getApiById } = await import("../server/db");
-      return getApiById(input.id);
-    }),
+    list: publicProcedure
+      .input(z.object({ pjtId: z.number().optional() }).optional())
+      .query(async ({ input }) => {
+        const { listApis } = await import("../server/db");
+        return await listApis(input?.pjtId);
+      }),
+    
+    getById: publicProcedure
+      .input(z.object({ apiId: z.number() }))
+      .query(async ({ input }) => {
+        const { getApiById } = await import("../server/db");
+        return await getApiById(input.apiId);
+      }),
   }),
 
+  // ==========================================
+  // API KEY MANAGEMENT
+  // ==========================================
   apiKeys: router({
-    list: publicProcedure.query(async () => {
-      const { getApiKeysList } = await import("../server/db");
-      return getApiKeysList();
-    }),
-    getById: publicProcedure.input((val: any) => ({ id: val.id as number })).query(async ({ input }) => {
-      const { getApiKeyById } = await import("../server/db");
-      return getApiKeyById(input.id);
-    }),
+    list: publicProcedure
+      .input(z.object({
+        apiId: z.number().optional(),
+        pjtId: z.number().optional(),
+      }).optional())
+      .query(async ({ input }) => {
+        const { listApiKeys } = await import("../server/db");
+        return await listApiKeys(input?.apiId, input?.pjtId);
+      }),
+    
+    getById: publicProcedure
+      .input(z.object({ keyId: z.number() }))
+      .query(async ({ input }) => {
+        const { getApiKeyById } = await import("../server/db");
+        return await getApiKeyById(input.keyId);
+      }),
   }),
 
-  evaluations: router({
-    list: publicProcedure.query(async () => {
-      const { getEvaluationsList } = await import("../server/db");
-      return getEvaluationsList();
-    }),
-    getById: publicProcedure.input((val: any) => ({ id: val.id as number })).query(async ({ input }) => {
-      const { getEvaluationById } = await import("../server/db");
-      return getEvaluationById(input.id);
-    }),
+  // ==========================================
+  // API USAGE & STATISTICS
+  // ==========================================
+  apiUsage: router({
+    listByProject: publicProcedure
+      .input(z.object({ pjtId: z.number() }))
+      .query(async ({ input }) => {
+        const { listApiUsageByProject } = await import("../server/db");
+        return await listApiUsageByProject(input.pjtId);
+      }),
+    
+    getByProjectAndApi: publicProcedure
+      .input(z.object({
+        pjtId: z.number(),
+        apiId: z.number(),
+      }))
+      .query(async ({ input }) => {
+        const { getApiUsageByProjectAndApi } = await import("../server/db");
+        return await getApiUsageByProjectAndApi(input.pjtId, input.apiId);
+      }),
   }),
 
-  anomalyDetections: router({
-    list: publicProcedure.query(async () => {
-      const { getAnomalyDetectionsList } = await import("../server/db");
-      return getAnomalyDetectionsList();
-    }),
-    getById: publicProcedure.input((val: any) => ({ id: val.id as number })).query(async ({ input }) => {
-      const { getAnomalyDetectionById } = await import("../server/db");
-      return getAnomalyDetectionById(input.id);
-    }),
-  }),
-
-  resourceGroups: router({
-    list: publicProcedure.query(async () => {
-      const { getResourceGroupsList } = await import("../server/db");
-      return getResourceGroupsList();
-    }),
-    getById: publicProcedure.input((val: any) => ({ id: val.id as number })).query(async ({ input }) => {
-      const { getResourceGroupById } = await import("../server/db");
-      return getResourceGroupById(input.id);
+  // ==========================================
+  // DASHBOARD
+  // ==========================================
+  dashboard: router({
+    getStats: publicProcedure.query(async () => {
+      // Mock dashboard statistics
+      return {
+        totalProjects: 5,
+        totalApis: 12,
+        totalApiKeys: 25,
+        todayRequests: 1234,
+        todaySuccessRate: 98.5,
+        gpuUsage: 65,
+        cpuUsage: 45,
+        memoryUsage: 72,
+      };
     }),
   }),
 });

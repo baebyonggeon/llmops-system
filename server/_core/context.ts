@@ -1,20 +1,26 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
-import type { User } from "../../drizzle/schema";
+import type { MbrBas } from "../../drizzle/schema";
 import { sdk } from "./sdk";
 
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
   res: CreateExpressContextOptions["res"];
-  user: User | null;
+  user: (MbrBas & { role?: "admin" | "user" }) | null;
 };
 
 export async function createContext(
   opts: CreateExpressContextOptions
 ): Promise<TrpcContext> {
-  let user: User | null = null;
+  let user: (MbrBas & { role?: "admin" | "user" }) | null = null;
 
   try {
-    user = await sdk.authenticateRequest(opts.req);
+    const authUser = await sdk.authenticateRequest(opts.req);
+    if (authUser) {
+      user = {
+        ...authUser,
+        role: authUser.mbrTypeCd === "admin" ? "admin" : "user",
+      };
+    }
   } catch (error) {
     // Authentication is optional for public procedures.
     user = null;

@@ -8,7 +8,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { initializeTrainingMetricsServer } from "../trainingMetrics";
+import { initializeTrainingMetrics } from "../trainingMetrics";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -42,7 +42,7 @@ async function startServer() {
   });
   
   // Initialize training metrics server
-  initializeTrainingMetricsServer(io);
+  initializeTrainingMetrics(io);
   
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));

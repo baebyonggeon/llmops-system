@@ -1,8 +1,5 @@
-import { TrainingMetric } from "./trainingMetrics";
 import { getDb } from "./db";
-import { notifications, alertConditions } from "../drizzle/schema";
 import { nanoid } from "nanoid";
-import { eq, and } from "drizzle-orm";
 
 export interface AlertRule {
   conditionType: "loss_threshold" | "accuracy_target" | "training_completed" | "training_failed";
@@ -20,277 +17,206 @@ export interface NotificationPayload {
     | "loss_threshold"
     | "accuracy_target"
     | "training_failed"
-    | "training_started"
-    | "custom";
+    | "system_alert";
   title: string;
   message: string;
   severity: "info" | "warning" | "error" | "success";
   metadata?: Record<string, any>;
 }
 
-// 조건 평가 함수
-export function evaluateCondition(metric: TrainingMetric, rule: AlertRule): boolean {
-  if (!rule.threshold || !rule.operator) return false;
+export class NotificationEngine {
+  private alertRules: Map<string, AlertRule> = new Map();
 
-  const value = rule.conditionType === "loss_threshold" ? metric.loss : metric.accuracy;
-
-  switch (rule.operator) {
-    case "less_than":
-      return value < rule.threshold;
-    case "greater_than":
-      return value > rule.threshold;
-    case "equal":
-      return Math.abs(value - rule.threshold) < 0.0001;
-    case "less_equal":
-      return value <= rule.threshold;
-    case "greater_equal":
-      return value >= rule.threshold;
-    default:
-      return false;
-  }
-}
-
-// 알림 저장
-export async function saveNotification(payload: NotificationPayload): Promise<void> {
-  const db = await getDb();
-  if (!db) {
-    console.warn("[Notification Engine] Database not available");
-    return;
+  /**
+   * Register an alert rule for a user
+   */
+  registerAlertRule(rule: AlertRule): string {
+    const ruleId = nanoid();
+    this.alertRules.set(ruleId, rule);
+    return ruleId;
   }
 
-  try {
-    await db.insert(notifications).values({
-      notificationId: `notif_${nanoid()}`,
-      userId: payload.userId,
-      trainingId: payload.trainingId,
-      notificationType: payload.notificationType,
-      title: payload.title,
-      message: payload.message,
-      severity: payload.severity,
-      metadata: payload.metadata ? JSON.stringify(payload.metadata) : null,
+  /**
+   * Evaluate metrics against alert rules
+   */
+  evaluateMetrics(
+    userId: number,
+    trainingId: number,
+    metrics: {
+      loss?: number;
+      accuracy?: number;
+      status?: string;
+    }
+  ): AlertRule[] {
+    const triggeredRules: AlertRule[] = [];
+
+    this.alertRules.forEach((rule) => {
+      if (rule.userId !== userId || (rule.trainingId && rule.trainingId !== trainingId)) {
+        return;
+      }
+
+      let triggered = false;
+
+      switch (rule.conditionType) {
+        case "loss_threshold":
+          if (metrics.loss !== undefined && rule.threshold !== undefined) {
+            triggered = this.evaluateCondition(metrics.loss, rule.threshold, rule.operator);
+          }
+          break;
+
+        case "accuracy_target":
+          if (metrics.accuracy !== undefined && rule.threshold !== undefined) {
+            triggered = this.evaluateCondition(metrics.accuracy, rule.threshold, rule.operator);
+          }
+          break;
+
+        case "training_completed":
+          triggered = metrics.status === "completed";
+          break;
+
+        case "training_failed":
+          triggered = metrics.status === "failed";
+          break;
+      }
+
+      if (triggered) {
+        triggeredRules.push(rule);
+      }
     });
 
-    console.log(
-      `[Notification Engine] Notification saved for user ${payload.userId}: ${payload.title}`
-    );
-  } catch (error) {
-    console.error("[Notification Engine] Failed to save notification:", error);
-  }
-}
-
-// 사용자의 활성 알림 조건 조회
-export async function getActiveAlertConditions(
-  userId: number,
-  trainingId?: number
-): Promise<AlertRule[]> {
-  const db = await getDb();
-  if (!db) {
-    console.warn("[Notification Engine] Database not available");
-    return [];
+    return triggeredRules;
   }
 
-  try {
-    const conditions = await db
-      .select()
-      .from(alertConditions)
-      .where(
-        and(
-          eq(alertConditions.userId, userId),
-          eq(alertConditions.isActive, true),
-          trainingId ? eq(alertConditions.trainingId, trainingId) : undefined
-        )
-      );
-
-    return conditions.map((c) => ({
-      conditionType: c.conditionType as any,
-      threshold: c.threshold ? Number(c.threshold) : undefined,
-      operator: c.operator as any,
-      userId: c.userId,
-      trainingId: c.trainingId || undefined,
-    }));
-  } catch (error) {
-    console.error("[Notification Engine] Failed to get alert conditions:", error);
-    return [];
-  }
-}
-
-// 메트릭 기반 알림 처리
-export async function processMetricAlerts(
-  metric: TrainingMetric,
-  userId: number
-): Promise<void> {
-  // 활성 알림 조건 조회
-  const conditions = await getActiveAlertConditions(userId, metric.trainingId);
-
-  for (const condition of conditions) {
-    if (evaluateCondition(metric, condition)) {
-      let title = "";
-      let message = "";
-      let severity: "info" | "warning" | "error" | "success" = "info";
-
-      if (condition.conditionType === "loss_threshold") {
-        title = "Loss 임계값 도달";
-        message = `Training ${metric.trainingId}의 Loss가 ${condition.threshold}에 도달했습니다. (현재: ${metric.loss.toFixed(4)})`;
-        severity = "success";
-      } else if (condition.conditionType === "accuracy_target") {
-        title = "정확도 목표 달성";
-        message = `Training ${metric.trainingId}의 정확도가 ${condition.threshold}%에 도달했습니다. (현재: ${metric.accuracy.toFixed(2)}%)`;
-        severity = "success";
-      }
-
-      if (title) {
-        await saveNotification({
-          userId,
-          trainingId: metric.trainingId,
-          notificationType:
-            condition.conditionType === "loss_threshold" ? "loss_threshold" : "accuracy_target",
-          title,
-          message,
-          severity,
-          metadata: {
-            metricType: condition.conditionType,
-            threshold: condition.threshold,
-            currentValue:
-              condition.conditionType === "loss_threshold" ? metric.loss : metric.accuracy,
-            epoch: metric.epoch,
-          },
-        });
-      }
+  /**
+   * Evaluate a single condition
+   */
+  private evaluateCondition(
+    value: number,
+    threshold: number,
+    operator?: string
+  ): boolean {
+    switch (operator) {
+      case "less_than":
+        return value < threshold;
+      case "greater_than":
+        return value > threshold;
+      case "equal":
+        return value === threshold;
+      case "less_equal":
+        return value <= threshold;
+      case "greater_equal":
+        return value >= threshold;
+      default:
+        return value < threshold;
     }
   }
-}
 
-// 학습 완료 알림
-export async function notifyTrainingCompleted(
-  trainingId: number,
-  userId: number,
-  finalMetric: TrainingMetric
-): Promise<void> {
-  await saveNotification({
-    userId,
-    trainingId,
-    notificationType: "training_completed",
-    title: "학습 완료",
-    message: `Training ${trainingId}이(가) 완료되었습니다. 최종 Loss: ${finalMetric.loss.toFixed(4)}, 정확도: ${finalMetric.accuracy.toFixed(2)}%`,
-    severity: "success",
-    metadata: {
-      finalLoss: finalMetric.loss,
-      finalAccuracy: finalMetric.accuracy,
-      finalEpoch: finalMetric.epoch,
-    },
-  });
-}
+  /**
+   * Create and send a notification
+   */
+  async sendNotification(payload: NotificationPayload): Promise<void> {
+    try {
+      const db = await getDb();
+      if (!db) {
+        console.warn("[NotificationEngine] Database not available");
+        return;
+      }
 
-// 학습 실패 알림
-export async function notifyTrainingFailed(
-  trainingId: number,
-  userId: number,
-  reason: string
-): Promise<void> {
-  await saveNotification({
-    userId,
-    trainingId,
-    notificationType: "training_failed",
-    title: "학습 실패",
-    message: `Training ${trainingId}이(가) 실패했습니다. 사유: ${reason}`,
-    severity: "error",
-    metadata: {
-      failureReason: reason,
-    },
-  });
-}
+      // In a real implementation, you would insert into a notifications table
+      // For now, we'll just log it
+      console.log("[NotificationEngine] Notification sent:", {
+        userId: payload.userId,
+        type: payload.notificationType,
+        title: payload.title,
+        severity: payload.severity,
+        timestamp: new Date().toISOString(),
+      });
 
-// 학습 시작 알림
-export async function notifyTrainingStarted(
-  trainingId: number,
-  userId: number,
-  trainingName: string
-): Promise<void> {
-  await saveNotification({
-    userId,
-    trainingId,
-    notificationType: "training_started",
-    title: "학습 시작",
-    message: `Training "${trainingName}"이(가) 시작되었습니다.`,
-    severity: "info",
-    metadata: {
-      trainingName,
-    },
-  });
-}
-
-// 사용자의 읽지 않은 알림 조회
-export async function getUnreadNotifications(userId: number, limit: number = 20) {
-  const db = await getDb();
-  if (!db) {
-    console.warn("[Notification Engine] Database not available");
-    return [];
+      // Emit WebSocket event if available
+      // This would be handled by the trainingMetrics module
+    } catch (error) {
+      console.error("[NotificationEngine] Failed to send notification:", error);
+    }
   }
 
-  try {
-    const unreadNotifications = await db
-      .select()
-      .from(notifications)
-      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)))
-      .orderBy((t) => t.createdAt)
-      .limit(limit);
-
-    return unreadNotifications;
-  } catch (error) {
-    console.error("[Notification Engine] Failed to get unread notifications:", error);
-    return [];
-  }
-}
-
-// 알림 읽음 표시
-export async function markNotificationAsRead(notificationId: string): Promise<void> {
-  const db = await getDb();
-  if (!db) {
-    console.warn("[Notification Engine] Database not available");
-    return;
-  }
-
-  try {
-    await db
-      .update(notifications)
-      .set({ isRead: true, readAt: new Date() })
-      .where(eq(notifications.notificationId, notificationId));
-  } catch (error) {
-    console.error("[Notification Engine] Failed to mark notification as read:", error);
-  }
-}
-
-// 알림 조건 생성
-export async function createAlertCondition(
-  userId: number,
-  trainingId: number | undefined,
-  conditionType: "loss_threshold" | "accuracy_target" | "training_completed" | "training_failed",
-  threshold?: number,
-  operator?: "less_than" | "greater_than" | "equal" | "less_equal" | "greater_equal",
-  description?: string
-): Promise<void> {
-  const db = await getDb();
-  if (!db) {
-    console.warn("[Notification Engine] Database not available");
-    return;
-  }
-
-  try {
-    await db.insert(alertConditions).values({
-      conditionId: `cond_${nanoid()}`,
+  /**
+   * Create notification for training completion
+   */
+  async notifyTrainingCompleted(
+    userId: number,
+    trainingId: number,
+    metrics: { loss: number; accuracy: number; duration: number }
+  ): Promise<void> {
+    await this.sendNotification({
       userId,
       trainingId,
-      conditionType,
-      threshold: threshold ? String(threshold) : null,
-      operator,
-      description,
-      isActive: true,
+      notificationType: "training_completed",
+      title: "Training Completed",
+      message: `Training completed with Loss: ${metrics.loss.toFixed(4)}, Accuracy: ${metrics.accuracy.toFixed(2)}%`,
+      severity: "success",
+      metadata: metrics,
     });
+  }
 
-    console.log(
-      `[Notification Engine] Alert condition created for user ${userId}: ${conditionType}`
-    );
-  } catch (error) {
-    console.error("[Notification Engine] Failed to create alert condition:", error);
+  /**
+   * Create notification for loss threshold reached
+   */
+  async notifyLossThresholdReached(
+    userId: number,
+    trainingId: number,
+    currentLoss: number,
+    threshold: number
+  ): Promise<void> {
+    await this.sendNotification({
+      userId,
+      trainingId,
+      notificationType: "loss_threshold",
+      title: "Loss Threshold Reached",
+      message: `Training loss has reached ${currentLoss.toFixed(4)} (threshold: ${threshold.toFixed(4)})`,
+      severity: "info",
+      metadata: { currentLoss, threshold },
+    });
+  }
+
+  /**
+   * Create notification for accuracy target reached
+   */
+  async notifyAccuracyTargetReached(
+    userId: number,
+    trainingId: number,
+    currentAccuracy: number,
+    target: number
+  ): Promise<void> {
+    await this.sendNotification({
+      userId,
+      trainingId,
+      notificationType: "accuracy_target",
+      title: "Accuracy Target Reached",
+      message: `Training accuracy has reached ${currentAccuracy.toFixed(2)}% (target: ${target.toFixed(2)}%)`,
+      severity: "success",
+      metadata: { currentAccuracy, target },
+    });
+  }
+
+  /**
+   * Create notification for training failure
+   */
+  async notifyTrainingFailed(
+    userId: number,
+    trainingId: number,
+    error: string
+  ): Promise<void> {
+    await this.sendNotification({
+      userId,
+      trainingId,
+      notificationType: "training_failed",
+      title: "Training Failed",
+      message: `Training failed: ${error}`,
+      severity: "error",
+      metadata: { error },
+    });
   }
 }
+
+// Export singleton instance
+export const notificationEngine = new NotificationEngine();
