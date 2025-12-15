@@ -91,3 +91,13 @@
 - [x] 백엔드 코드 PostgreSQL 호환성 업데이트
 - [x] 프론트엔드 코드 PostgreSQL 스키마에 맞게 수정
 - [x] 개발 서버 재시작 및 정상 작동 확인
+
+## Phase 11: Docker 컨른테이너 패키짱 및 로컬 PC 배포
+- [x] Dockerfile 작성 (Node.js 기반 멘늴 스테이지 빌드)
+- [x] docker-compose.yml 작성 (PostgreSQL + 애플리케이션)
+- [x] init-db.sql 작성 (데이터베이스 초기화)
+- [x] .dockerignore 작성
+- [x] DOCKER_SETUP.md 작성 (상세 설치 가이드)
+- [ ] Docker 이미지 빌드 및 테스트
+- [ ] Docker Compose로 로컬 실행 테스트
+- [ ] Docker 배포 최종 검증

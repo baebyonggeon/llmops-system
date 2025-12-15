@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: llmops-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: llm1234!
+      POSTGRES_DB: llmops
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - llmops-network
+
+  # LLMOps Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: llmops-app
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://postgres:llm1234!@postgres:5432/llmops?sslmode=disable
+      PORT: 3000
+      VITE_APP_ID: ${VITE_APP_ID:-default}
+      OAUTH_SERVER_URL: ${OAUTH_SERVER_URL:-https://api.manus.im}
+      VITE_OAUTH_PORTAL_URL: ${VITE_OAUTH_PORTAL_URL:-https://portal.manus.im}
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-in-production}
+      OWNER_OPEN_ID: ${OWNER_OPEN_ID:-owner}
+      OWNER_NAME: ${OWNER_NAME:-Owner}
+      BUILT_IN_FORGE_API_URL: ${BUILT_IN_FORGE_API_URL:-https://api.manus.im}
+      BUILT_IN_FORGE_API_KEY: ${BUILT_IN_FORGE_API_KEY:-}
+      VITE_FRONTEND_FORGE_API_URL: ${VITE_FRONTEND_FORGE_API_URL:-https://api.manus.im}
+      VITE_FRONTEND_FORGE_API_KEY: ${VITE_FRONTEND_FORGE_API_KEY:-}
+      VITE_APP_TITLE: LLMOps System
+      VITE_APP_LOGO: /logo.svg
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./client/public:/app/client/public
+    networks:
+      - llmops-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  llmops-network:
+    driver: bridge
