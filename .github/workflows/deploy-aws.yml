@@ -4,30 +4,24 @@ on:
   push:
     branches:
       - main
-      - develop
-  pull_request:
-    branches:
-      - main
-      - develop
+  workflow_dispatch:
 
 env:
-  AWS_REGION: ap-northeast-1
-  ECR_REPOSITORY: llmops-system
-  ECS_SERVICE: llmops-service
-  ECS_CLUSTER: llmops-cluster
-  ECS_TASK_DEFINITION: llmops-task
+  AWS_REGION: ap-northeast-2
+  ECR_REPOSITORY: prod-llmops-app
+  ECS_SERVICE: prod-llmops-service
+  ECS_CLUSTER: prod-llmops-cluster
+  ECS_TASK_DEFINITION_FAMILY: prod-llmops-app
+  CONTAINER_NAME: llmops-app
 
 jobs:
-  build:
-    name: Build and Push to ECR
+  build-and-deploy:
+    name: Build, Push to ECR and Deploy to ECS
     runs-on: ubuntu-latest
     
     permissions:
       contents: read
       id-token: write
-    
-    outputs:
-      image: ${{ steps.image.outputs.image }}
     
     steps:
       - name: Checkout code
@@ -36,7 +30,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-to-assume: arn:aws:iam::083281668815:role/llmops-github-actions-role
           aws-region: ${{ env.AWS_REGION }}
       
       - name: Login to Amazon ECR
@@ -44,53 +38,43 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
       
       - name: Build, tag, and push image to Amazon ECR
-        id: image
+        id: build-image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
       
-      - name: Upload task definition
-        uses: actions/upload-artifact@v3
-        with:
-          name: task-definition
-          path: ./ecs-task-definition.json
-  
-  deploy:
-    name: Deploy to ECS
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
-    permissions:
-      contents: read
-      id-token: write
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          aws-region: ${{ env.AWS_REGION }}
-      
-      - name: Download task definition
-        uses: actions/download-artifact@v3
-        with:
-          name: task-definition
+      - name: Get current task definition
+        id: get-task-def
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ env.ECS_TASK_DEFINITION_FAMILY }} \
+            --query 'taskDefinition' \
+            --output json > task-definition.json
+          
+          # Remove fields that are not needed for registration
+          cat task-definition.json | jq 'del(
+            .taskDefinitionArn,
+            .revision,
+            .status,
+            .requiresAttributes,
+            .compatibilities,
+            .registeredAt,
+            .registeredBy
+          )' > task-definition-clean.json
       
       - name: Fill in the new image ID in the Amazon ECS task definition
         id: task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
-          task-definition: ecs-task-definition.json
-          container-name: ${{ env.ECS_SERVICE }}
-          image: ${{ needs.build.outputs.image }}
+          task-definition: task-definition-clean.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.build-image.outputs.image }}
       
       - name: Deploy Amazon ECS task definition
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
@@ -100,43 +84,14 @@ jobs:
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
       
-      - name: Notify Slack on success
+      - name: Deployment summary
         if: success()
-        uses: slackapi/slack-github-action@v1.24.0
-        with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
-          payload: |
-            {
-              "text": "✅ LLMOps deployment to AWS ECS successful",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*LLMOps Deployment Successful*\n*Commit:* <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>\n*Branch:* ${{ github.ref_name }}"
-                  }
-                }
-              ]
-            }
-      
-      - name: Notify Slack on failure
-        if: failure()
-        uses: slackapi/slack-github-action@v1.24.0
-        with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
-          payload: |
-            {
-              "text": "❌ LLMOps deployment to AWS ECS failed",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*LLMOps Deployment Failed*\n*Commit:* <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>\n*Branch:* ${{ github.ref_name }}\n*Reason:* See workflow logs for details"
-                  }
-                }
-              ]
-            }
+        run: |
+          echo "✅ Deployment successful!"
+          echo "Image: ${{ steps.build-image.outputs.image }}"
+          echo "Service: ${{ env.ECS_SERVICE }}"
+          echo "Cluster: ${{ env.ECS_CLUSTER }}"
+          echo "Region: ${{ env.AWS_REGION }}"
 
   test:
     name: Run Tests
@@ -150,7 +105,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'pnpm'
       
       - name: Install pnpm
         uses: pnpm/action-setup@v2
@@ -165,10 +119,3 @@ jobs:
       
       - name: Run type check
         run: pnpm check
-      
-      - name: Upload coverage
-        uses: codecov/codecov-action@v3
-        with:
-          files: ./coverage/coverage-final.json
-          flags: unittests
-          name: codecov-umbrella
